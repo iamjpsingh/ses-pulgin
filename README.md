@@ -1,67 +1,65 @@
 # Xtrusio Amazon SES Plugin
 
-Amazon SES email transport plugin for Xtrusio (Mautic 7.x compatible) with full bounce, complaint, and delivery tracking via SNS webhooks.
+Adds bounce, complaint, and delivery tracking for Amazon SES via SNS webhooks. Works with Symfony's built-in SES transport (`symfony/amazon-mailer`).
 
 ## Requirements
 
 - Xtrusio 7.x (or Mautic 7.x)
 - PHP 8.2+
+- `symfony/amazon-mailer` package installed
 - AWS account with SES access
 - SES verified domain or email address
 
 ## Installation
 
-### Option 1: Copy to plugins directory
-
 ```bash
+# 1. Install the Symfony SES mailer package
+composer require symfony/amazon-mailer
+
+# 2. Copy plugin to plugins directory
 cp -r XtrusioAmazonSesBundle /path/to/xtrusio/plugins/
-cd /path/to/xtrusio
-composer require symfony/amazon-mailer --ignore-platform-req=ext-imap
+
+# 3. Clear cache and reload plugins
 php bin/console cache:clear
+php bin/console xtrusio:plugins:reload
 ```
 
-### Option 2: Composer (if published)
+Or use the UI: **Settings > Plugins > "Install/Upgrade Plugins"** after copying files.
 
-```bash
-composer require xtrusio/plugin-amazon-ses
-```
+## Configuration via UI
 
-After installing, go to **Settings > Plugins** and click **"Install/Upgrade Plugins"**.
+Go to **Settings > Email Settings > Email DSN** and fill in:
 
-## Configuration
+| Field | Value |
+|---|---|
+| **Scheme** | `ses+api` |
+| **Host** | `default` |
+| **User** | Your AWS Access Key ID (e.g. `AKIAIOSFODNN7EXAMPLE`) |
+| **Password** | Your AWS Secret Access Key |
+| **Options** | Key: `region`, Value: your AWS region (e.g. `us-east-1`, `eu-west-1`, `ap-south-1`) |
 
-### DSN Format
+Click **Save** and use the **"Send Test Email"** button to verify.
 
-Set the mailer DSN in your Xtrusio configuration:
-
-```
-ses+api://ACCESS_KEY:SECRET_KEY@REGION
-```
-
-**Examples:**
-
-```
-ses+api://AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY@us-east-1
-ses+api://AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY@eu-west-1
-```
-
-**With Configuration Set (for event tracking):**
-
-```
-ses+api://ACCESS_KEY:SECRET_KEY@REGION?configuration_set=my-config-set
-```
-
-### Setting via UI
-
-1. Go to **Settings > Email Settings**
-2. Set **Mailer Transport** to the DSN above
-3. Save
-
-### Setting via config/local.php
+## Configuration via config/local.php
 
 ```php
-'mailer_dsn' => 'ses+api://ACCESS_KEY:SECRET_KEY@us-east-1',
+'mailer_dsn' => 'ses+api://ACCESS_KEY:SECRET_KEY@default?region=us-east-1',
 ```
+
+## Configuration via Environment Variable
+
+```bash
+MAILER_DSN=ses+api://ACCESS_KEY:SECRET_KEY@default?region=us-east-1
+```
+
+## Available DSN Schemes
+
+| Scheme | Protocol | Use case |
+|---|---|---|
+| `ses+api` | SES v2 HTTPS API | Recommended - fastest |
+| `ses+https` | SES v2 HTTPS | Alternative API method |
+| `ses+smtp` | SMTP via SES | Use if API access is restricted |
+| `ses` | Default (same as `ses+smtp`) | Fallback |
 
 ## AWS Setup for Bounce/Complaint Tracking
 
@@ -76,10 +74,10 @@ ses+api://ACCESS_KEY:SECRET_KEY@REGION?configuration_set=my-config-set
 Create an HTTPS subscription pointing to your Xtrusio webhook:
 
 ```
-https://your-xtrusio-domain.com/mailer/callback
+https://your-domain.com/mailer/callback
 ```
 
-The plugin will automatically confirm the SNS subscription.
+The plugin automatically confirms the SNS subscription.
 
 ### Step 3: Configure SES Notifications
 
@@ -93,25 +91,23 @@ The plugin will automatically confirm the SNS subscription.
 1. Go to **SES > Configuration Sets**
 2. Create a new set (e.g., `xtrusio-tracking`)
 3. Add an **SNS event destination** for Bounce, Complaint, Delivery, and Reject events
-4. Add `?configuration_set=xtrusio-tracking` to your DSN
+4. Add `configuration_set` to your DSN options in the UI
 
 ## How It Works
 
 ### Sending
-- Emails are sent via the SES v2 `SendEmail` API using raw MIME messages
-- Supports batch sending (up to 50 recipients per batch)
-- Includes tracking hash in email tags for delivery correlation
+Handled by Symfony's built-in `SesTransportFactory` from the `symfony/amazon-mailer` package.
 
-### Bounce Handling
+### Bounce Handling (this plugin)
 - Hard bounces (Permanent) mark contacts as **Do Not Contact (Bounced)**
 - Soft bounces (Transient) are logged for monitoring
 - Bounce details stored in email stats
 
-### Complaint Handling
+### Complaint Handling (this plugin)
 - Spam complaints mark contacts as **Do Not Contact (Unsubscribed)**
 - Complaint type (abuse, auth-failure, etc.) logged
 
-### Delivery Tracking
+### Delivery Tracking (this plugin)
 - Successful deliveries are logged for audit purposes
 
 ## Webhook Endpoint
@@ -127,6 +123,9 @@ Accepts:
 
 ## Troubleshooting
 
+### "Unsupported scheme ses+api" error
+Run: `composer require symfony/amazon-mailer`
+
 ### Test email works but campaign sending doesn't
 - Check SES sending limits in AWS console
 - Verify you're out of the SES sandbox (or recipients are verified)
@@ -135,10 +134,6 @@ Accepts:
 - Verify SNS subscription is confirmed (check AWS SNS console)
 - Check that the webhook URL is publicly accessible
 - Check Xtrusio logs at `var/logs/`
-
-### "Access Denied" errors
-- Verify IAM user has `ses:SendEmail` and `ses:SendRawEmail` permissions
-- Check that the access key and secret key are correct
 
 ## IAM Policy
 
