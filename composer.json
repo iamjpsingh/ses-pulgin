@@ -1,0 +1,27 @@
+{
+    "name": "xtrusio/plugin-amazon-ses",
+    "description": "Amazon SES email transport plugin for Xtrusio with bounce, complaint, and delivery tracking via SNS webhooks",
+    "type": "xtrusio-plugin",
+    "license": "GPL-3.0-or-later",
+    "keywords": [
+        "xtrusio",
+        "plugin",
+        "amazon-ses",
+        "email",
+        "transport"
+    ],
+    "extra": {
+        "install-directory-name": "XtrusioAmazonSesBundle"
+    },
+    "autoload": {
+        "psr-4": {
+            "XtrusioPlugin\\XtrusioAmazonSesBundle\\": ""
+        }
+    },
+    "require": {
+        "php": ">=8.2",
+        "xtrusio/core-lib": "^7.0",
+        "symfony/amazon-mailer": "^6.4 || ^7.0"
+    },
+    "minimum-stability": "dev"
+}
