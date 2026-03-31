@@ -1,0 +1,28 @@
+{
+    "name": "iamjpsingh/mautic-ses-plugin",
+    "description": "Bounce, complaint, and delivery tracking for Amazon SES via SNS webhooks for Mautic 6+",
+    "type": "mautic-plugin",
+    "license": "GPL-3.0-or-later",
+    "keywords": [
+        "mautic",
+        "plugin",
+        "amazon-ses",
+        "email",
+        "bounce",
+        "sns-webhook"
+    ],
+    "extra": {
+        "install-directory-name": "MauticAmazonSesBundle"
+    },
+    "autoload": {
+        "psr-4": {
+            "MauticPlugin\\MauticAmazonSesBundle\\": ""
+        }
+    },
+    "require": {
+        "php": ">=8.2",
+        "mautic/core-lib": "^6.0 || ^7.0",
+        "symfony/amazon-mailer": "^6.4 || ^7.0"
+    },
+    "minimum-stability": "dev"
+}
