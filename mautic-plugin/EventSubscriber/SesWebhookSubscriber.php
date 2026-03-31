@@ -148,7 +148,7 @@ class SesWebhookSubscriber implements EventSubscriberInterface
         $recipients = $bounce['bouncedRecipients'] ?? [];
 
         foreach ($recipients as $recipient) {
-            $email       = $recipient['emailAddress'] ?? '';
+            $email       = $this->parseEmailAddress($recipient['emailAddress'] ?? '');
             $status      = $recipient['status'] ?? '';
             $diagnostics = $recipient['diagnosticCode'] ?? '';
 
@@ -182,7 +182,7 @@ class SesWebhookSubscriber implements EventSubscriberInterface
         $recipients    = $complaint['complainedRecipients'] ?? [];
 
         foreach ($recipients as $recipient) {
-            $email = $recipient['emailAddress'] ?? '';
+            $email = $this->parseEmailAddress($recipient['emailAddress'] ?? '');
 
             if (empty($email)) {
                 continue;
@@ -229,7 +229,7 @@ class SesWebhookSubscriber implements EventSubscriberInterface
 
         foreach ($recipients as $email) {
             $comment = sprintf('SES Rejected: %s', $reason);
-            $this->transportCallback->addFailureByAddress($email, $comment, DNC::BOUNCED);
+            $this->transportCallback->addFailureByAddress($this->parseEmailAddress($email), $comment, DNC::BOUNCED);
         }
     }
 
@@ -293,7 +293,7 @@ class SesWebhookSubscriber implements EventSubscriberInterface
         $delayedRecipients = $delay['delayedRecipients'] ?? [];
 
         foreach ($delayedRecipients as $recipient) {
-            $email       = $recipient['emailAddress'] ?? '';
+            $email       = $this->parseEmailAddress($recipient['emailAddress'] ?? '');
             $status      = $recipient['status'] ?? '';
             $diagnostics = $recipient['diagnosticCode'] ?? '';
 
@@ -338,6 +338,16 @@ class SesWebhookSubscriber implements EventSubscriberInterface
             'newPrefs'     => $newPrefs,
             'oldPrefs'     => $oldPrefs,
         ]);
+    }
+
+    private function parseEmailAddress(string $email): string
+    {
+        // SES may send "Display Name" <email@example.com> format
+        if (preg_match('/<([^>]+)>/', $email, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return trim($email);
     }
 
     private function extractHashId(array $payload): ?string
