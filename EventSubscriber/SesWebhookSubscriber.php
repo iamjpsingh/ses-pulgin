@@ -53,6 +53,16 @@ class SesWebhookSubscriber implements EventSubscriberInterface
             return;
         }
 
+        // Handle SNS unsubscribe confirmation
+        if ('UnsubscribeConfirmation' === $snsType || 'UnsubscribeConfirmation' === ($payload['Type'] ?? '')) {
+            $this->logger->warning('SES webhook: SNS topic unsubscribe confirmation received.', [
+                'topic' => $payload['TopicArn'] ?? '',
+            ]);
+            $event->setResponse(new JsonResponse(['status' => 'ok', 'message' => 'Unsubscribe confirmation received']));
+
+            return;
+        }
+
         // Handle SNS notification
         if ('Notification' === $snsType || 'Notification' === ($payload['Type'] ?? '')) {
             $message = json_decode($payload['Message'] ?? '{}', true);
@@ -113,11 +123,17 @@ class SesWebhookSubscriber implements EventSubscriberInterface
         }
 
         match ($eventType) {
-            'Bounce'    => $this->processBounce($payload),
-            'Complaint' => $this->processComplaint($payload),
-            'Delivery'  => $this->processDelivery($payload),
-            'Reject'    => $this->processReject($payload),
-            default     => $this->logger->debug('SES webhook: Unhandled event type.', ['type' => $eventType]),
+            'Bounce'            => $this->processBounce($payload),
+            'Complaint'         => $this->processComplaint($payload),
+            'Delivery'          => $this->processDelivery($payload),
+            'Reject'            => $this->processReject($payload),
+            'Send'              => $this->processSend($payload),
+            'Open'              => $this->processOpen($payload),
+            'Click'             => $this->processClick($payload),
+            'DeliveryDelay'     => $this->processDeliveryDelay($payload),
+            'Rendering Failure' => $this->processRenderingFailure($payload),
+            'Subscription'      => $this->processSubscription($payload),
+            default             => $this->logger->debug('SES webhook: Unhandled event type.', ['type' => $eventType]),
         };
 
         $event->setResponse(new JsonResponse(['status' => 'ok']));
@@ -132,7 +148,7 @@ class SesWebhookSubscriber implements EventSubscriberInterface
         $recipients = $bounce['bouncedRecipients'] ?? [];
 
         foreach ($recipients as $recipient) {
-            $email       = $recipient['emailAddress'] ?? '';
+            $email       = $this->parseEmailAddress($recipient['emailAddress'] ?? '');
             $status      = $recipient['status'] ?? '';
             $diagnostics = $recipient['diagnosticCode'] ?? '';
 
@@ -167,7 +183,7 @@ class SesWebhookSubscriber implements EventSubscriberInterface
         $recipients    = $complaint['complainedRecipients'] ?? [];
 
         foreach ($recipients as $recipient) {
-            $email = $recipient['emailAddress'] ?? '';
+            $email = $this->parseEmailAddress($recipient['emailAddress'] ?? '');
 
             if (empty($email)) {
                 continue;
@@ -188,11 +204,17 @@ class SesWebhookSubscriber implements EventSubscriberInterface
 
     private function processDelivery(array $payload): void
     {
-        $delivery   = $payload['delivery'] ?? [];
-        $recipients = $delivery['recipients'] ?? [];
+        $delivery       = $payload['delivery'] ?? [];
+        $recipients     = $delivery['recipients'] ?? [];
+        $smtpResponse   = $delivery['smtpResponse'] ?? '';
+        $processingTime = $delivery['processingTimeMillis'] ?? 0;
 
         foreach ($recipients as $email) {
-            $this->logger->debug('SES delivery confirmed.', ['email' => $email]);
+            $this->logger->debug('SES delivery confirmed.', [
+                'email'          => $email,
+                'smtpResponse'   => $smtpResponse,
+                'processingTime' => $processingTime,
+            ]);
         }
     }
 
@@ -209,8 +231,125 @@ class SesWebhookSubscriber implements EventSubscriberInterface
 
         foreach ($recipients as $email) {
             $comment = sprintf('SES Rejected: %s', $reason);
-            $this->transportCallback->addFailureByAddress($email, $comment, DNC::BOUNCED);
+            $this->transportCallback->addFailureByAddress($this->parseEmailAddress($email), $comment, DNC::BOUNCED);
         }
+    }
+
+    private function processSend(array $payload): void
+    {
+        $mail       = $payload['mail'] ?? [];
+        $recipients = $mail['destination'] ?? [];
+        $messageId  = $mail['messageId'] ?? '';
+
+        $this->logger->debug('SES send accepted.', [
+            'messageId'  => $messageId,
+            'recipients' => $recipients,
+        ]);
+    }
+
+    private function processOpen(array $payload): void
+    {
+        $open       = $payload['open'] ?? [];
+        $ipAddress  = $open['ipAddress'] ?? '';
+        $userAgent  = $open['userAgent'] ?? '';
+        $timestamp  = $open['timestamp'] ?? '';
+        $mail       = $payload['mail'] ?? [];
+        $recipients = $mail['destination'] ?? [];
+
+        foreach ($recipients as $email) {
+            $this->logger->debug('SES email opened.', [
+                'email'     => $email,
+                'ip'        => $ipAddress,
+                'userAgent' => $userAgent,
+                'timestamp' => $timestamp,
+            ]);
+        }
+    }
+
+    private function processClick(array $payload): void
+    {
+        $click      = $payload['click'] ?? [];
+        $ipAddress  = $click['ipAddress'] ?? '';
+        $userAgent  = $click['userAgent'] ?? '';
+        $link       = $click['link'] ?? '';
+        $timestamp  = $click['timestamp'] ?? '';
+        $mail       = $payload['mail'] ?? [];
+        $recipients = $mail['destination'] ?? [];
+
+        foreach ($recipients as $email) {
+            $this->logger->debug('SES link clicked.', [
+                'email'     => $email,
+                'link'      => $link,
+                'ip'        => $ipAddress,
+                'userAgent' => $userAgent,
+                'timestamp' => $timestamp,
+            ]);
+        }
+    }
+
+    private function processDeliveryDelay(array $payload): void
+    {
+        $delay             = $payload['deliveryDelay'] ?? [];
+        $delayType         = $delay['delayType'] ?? 'Unknown';
+        $expirationTime    = $delay['expirationTime'] ?? '';
+        $delayedRecipients = $delay['delayedRecipients'] ?? [];
+
+        foreach ($delayedRecipients as $recipient) {
+            $email       = $this->parseEmailAddress($recipient['emailAddress'] ?? '');
+            $status      = $recipient['status'] ?? '';
+            $diagnostics = $recipient['diagnosticCode'] ?? '';
+
+            $this->logger->warning('SES delivery delay.', [
+                'email'          => $email,
+                'delayType'      => $delayType,
+                'status'         => $status,
+                'diagnostics'    => $diagnostics,
+                'expirationTime' => $expirationTime,
+            ]);
+        }
+    }
+
+    private function processRenderingFailure(array $payload): void
+    {
+        $failure      = $payload['failure'] ?? [];
+        $errorMessage = $failure['errorMessage'] ?? 'Unknown error';
+        $templateName = $failure['templateName'] ?? '';
+        $mail         = $payload['mail'] ?? [];
+        $messageId    = $mail['messageId'] ?? '';
+
+        $this->logger->error('SES rendering failure.', [
+            'messageId'    => $messageId,
+            'templateName' => $templateName,
+            'error'        => $errorMessage,
+        ]);
+    }
+
+    private function processSubscription(array $payload): void
+    {
+        $subscription = $payload['subscription'] ?? [];
+        $contactList  = $subscription['contactList'] ?? '';
+        $source       = $subscription['source'] ?? '';
+        $timestamp    = $subscription['timestamp'] ?? '';
+        $newPrefs     = $subscription['newTopicPreferences'] ?? [];
+        $oldPrefs     = $subscription['oldTopicPreferences'] ?? [];
+
+        $this->logger->info('SES subscription event.', [
+            'contactList' => $contactList,
+            'source'      => $source,
+            'timestamp'   => $timestamp,
+            'newPrefs'    => $newPrefs,
+            'oldPrefs'    => $oldPrefs,
+        ]);
+    }
+
+    private function parseEmailAddress(string $email): string
+    {
+        // SES may send "Display Name" <email@example.com> format
+        if (preg_match('/<([^>]+)>/', $email, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return trim($email);
     }
 
     private function extractHashId(array $payload): ?string
