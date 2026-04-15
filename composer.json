@@ -1,16 +1,28 @@
 {
     "name": "xtrusio/plugin-amazon-ses",
-    "description": "Bounce, complaint, and delivery tracking for Amazon SES via SNS webhooks",
+    "description": "Bounce, complaint, and delivery tracking for Amazon SES via SNS webhooks for Xtrusio 7+ (Mautic 6+)",
     "type": "xtrusio-plugin",
     "license": "GPL-3.0-or-later",
     "keywords": [
         "xtrusio",
+        "mautic",
         "plugin",
         "amazon-ses",
         "email",
         "bounce",
         "sns-webhook"
     ],
+    "authors": [
+        {
+            "name": "Xtrusio",
+            "homepage": "https://github.com/iamjpsingh"
+        }
+    ],
+    "homepage": "https://github.com/iamjpsingh/ses-pulgin",
+    "support": {
+        "issues": "https://github.com/iamjpsingh/ses-pulgin/issues",
+        "source": "https://github.com/iamjpsingh/ses-pulgin"
+    },
     "extra": {
         "install-directory-name": "XtrusioAmazonSesBundle"
     },
@@ -23,6 +35,15 @@
         "php": ">=8.2",
         "xtrusio/core-lib": "^7.0",
         "symfony/amazon-mailer": "^6.4 || ^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0 || ^11.0"
+    },
+    "suggest": {
+        "symfony/http-client": "For better HTTP handling when confirming SNS subscriptions"
+    },
+    "provide": {
+        "xtrusio/ses-transport": "1.0.0"
     },
     "minimum-stability": "dev"
 }
